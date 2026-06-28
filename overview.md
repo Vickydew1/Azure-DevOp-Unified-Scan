@@ -1,0 +1,164 @@
+# AccuKnox Code Analysis
+
+Unified AccuKnox ASPM scanner for Azure DevOps. Run any combination of **SAST, SCA, Secret, IaC, ML Static Scan, API Discovery and SBOM** scans in a **single task** and upload the findings to the **AccuKnox Console** for centralized visibility, risk tracking and remediation.
+
+Instead of adding a separate task for every scanner, configure one task, pick the scans you need via **Scan Types**, and shift security left across your entire codebase.
+
+## Features
+
+- **7 scanners, one task** – SAST (OpenGrep), SCA (Trivy), Secret (TruffleHog), IaC (Checkov), ML Static Scan (ModelScan), API Discovery (code2api) and SBOM (image + filesystem).
+- **Run any combination** – Select one or many scans from the multi-select **Scan Types** input.
+- **Per-scan command text** – Every scanner exposes a `*Command` input mapped directly to the CLI's `--command`.
+- **IaC with frameworks** – Restrict IaC scans to one or more frameworks (e.g. `Kubernetes,Terraform`).
+- **SBOM for image & filesystem** – Generate a CycloneDX SBOM from a container image or your source tree.
+- **Soft fail** – Optionally keep the pipeline green even when findings are detected.
+
+## Prerequisites
+
+- A self-hosted Azure DevOps agent with **Docker** available (the scanner runs each tool in container mode).
+- An **AccuKnox Console** tenant, an **API token**, and a **label** to tag the uploaded results.
+
+## Inputs
+
+| Name | Description | Required | Default |
+|------|-------------|----------|---------|
+| `scanType` | Scans to run: `sast`, `sca`, `secret`, `iac`, `ml`, `api-discovery`, `sbom` | Yes | — |
+| `accuknoxEndpoint` | AccuKnox Console URL to push results to | Yes | — |
+| `accuknoxToken` | AccuKnox API token | Yes | — |
+| `accuknoxLabel` | Label for associating scan results | Yes | — |
+| `scannerVersion` | Git tag of the `accuknox-aspm-scanner` binary | No | `v0.14.7-rc.1` |
+| `softFail` | Do not fail the task on findings | No | `true` |
+
+Each scan also exposes its own optional inputs (see the README for the full table).
+
+## Examples
+
+All examples assume the credentials are defined as pipeline variables: `ACCUKNOX_ENDPOINT`, `ACCUKNOX_TOKEN`, `ACCUKNOX_LABEL`.
+
+### 1. SAST (OpenGrep)
+
+```yaml
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'sast'
+    accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
+    accuknoxToken: $(ACCUKNOX_TOKEN)
+    accuknoxLabel: $(ACCUKNOX_LABEL)
+    sastSeverity: 'HIGH,CRITICAL'
+    softFail: true
+```
+
+### 2. SCA (Trivy)
+
+```yaml
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'sca'
+    accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
+    accuknoxToken: $(ACCUKNOX_TOKEN)
+    accuknoxLabel: $(ACCUKNOX_LABEL)
+    scaSeverity: 'HIGH,CRITICAL'
+    softFail: true
+```
+
+### 3. Secret (TruffleHog)
+
+```yaml
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'secret'
+    accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
+    accuknoxToken: $(ACCUKNOX_TOKEN)
+    accuknoxLabel: $(ACCUKNOX_LABEL)
+    softFail: true
+```
+
+### 4. IaC (Checkov)
+
+```yaml
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'iac'
+    accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
+    accuknoxToken: $(ACCUKNOX_TOKEN)
+    accuknoxLabel: $(ACCUKNOX_LABEL)
+    iacFramework: 'Kubernetes,Terraform'
+    softFail: true
+```
+
+### 5. ML Static Scan (ModelScan)
+
+```yaml
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'ml'
+    accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
+    accuknoxToken: $(ACCUKNOX_TOKEN)
+    accuknoxLabel: $(ACCUKNOX_LABEL)
+    softFail: true
+```
+
+### 6. API Discovery (code2api)
+
+```yaml
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'api-discovery'
+    accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
+    accuknoxToken: $(ACCUKNOX_TOKEN)
+    accuknoxLabel: $(ACCUKNOX_LABEL)
+    softFail: true
+```
+
+### 7. SBOM
+
+> **Prerequisite — Create a Project** in the AccuKnox Console first (**SBOM → Projects → New Project**). Use the **Container** classifier for an image SBOM or **Application** for a filesystem SBOM, and pass the project name as `sbomProjectName`.
+
+Filesystem SBOM:
+
+```yaml
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'sbom'
+    accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
+    accuknoxToken: $(ACCUKNOX_TOKEN)
+    accuknoxLabel: $(ACCUKNOX_LABEL)
+    sbomScanType: 'filesystem'
+    sbomScanPath: '.'
+    sbomProjectName: 'my-project'   # required for SBOM
+    softFail: true
+```
+
+Image SBOM (build/pull the image earlier in the same job):
+
+```yaml
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'sbom'
+    accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
+    accuknoxToken: $(ACCUKNOX_TOKEN)
+    accuknoxLabel: $(ACCUKNOX_LABEL)
+    sbomScanType: 'image'
+    sbomImageRef: 'myapp:latest'
+    sbomProjectName: 'my-project'
+    softFail: true
+```
+
+### 8. Unified — all scans in one task
+
+```yaml
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'sast, sca, secret, iac, ml, api-discovery, sbom'
+    accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
+    accuknoxToken: $(ACCUKNOX_TOKEN)
+    accuknoxLabel: $(ACCUKNOX_LABEL)
+    softFail: true
+    sastSeverity: 'HIGH,CRITICAL'
+    iacFramework: 'Kubernetes,Terraform'
+    sbomScanType: 'filesystem'
+    sbomScanPath: '.'
+    sbomProjectName: 'my-project'
+```
+
+Review findings in the AccuKnox Console under **Dashboard → Issues → Findings**, filtered by scan type.

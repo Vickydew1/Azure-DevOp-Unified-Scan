@@ -1,0 +1,42 @@
+{
+    "manifestVersion": 1,
+    "id": "accuknox-code-analysis",
+    "name": "AccuKnox Code Analysis",
+    "version": "1.0.0",
+    "publisher": "AccuKnox",
+    "targets": [
+        {
+            "id": "Microsoft.VisualStudio.Services"
+        }
+    ],
+    "description": "Unified AccuKnox ASPM scanner for Azure DevOps. Run any combination of SAST, SCA, Secret, IaC, ML, API Discovery and SBOM scans in a single task and upload the results to the AccuKnox Console.",
+    "categories": [
+        "Azure Pipelines"
+    ],
+    "icons": {
+        "default": "images/logo.png"
+    },
+    "files": [
+        {
+            "path": "src"
+        }
+    ],
+    "contributions": [
+        {
+            "id": "accuknox-code-analysis",
+            "type": "ms.vss-distributed-task.task",
+            "targets": [
+                "ms.vss-distributed-task.tasks"
+            ],
+            "properties": {
+                "name": "src"
+            }
+        }
+    ],
+    "public": true,
+    "content": {
+        "details": {
+            "path": "overview.md"
+        }
+    }
+}

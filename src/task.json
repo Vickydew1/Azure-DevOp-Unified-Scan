@@ -1,0 +1,293 @@
+{
+    "$schema": "https://raw.githubusercontent.com/Microsoft/azure-pipelines-task-lib/master/tasks.schema.json",
+    "id": "d2b8b209-2770-409f-9f24-3cda44c6a541",
+    "name": "AccuKnox-Code-Analysis",
+    "friendlyName": "AccuKnox Code Analysis",
+    "description": "Unified AccuKnox ASPM scanner. Run any combination of SAST, SCA, Secret, IaC, ML, API Discovery and SBOM scans and upload the results to the AccuKnox Console.",
+    "helpMarkDown": "Unified AccuKnox ASPM scanner for Azure DevOps. Select one or more scans via 'Scan Types' and the task downloads the accuknox-aspm-scanner and runs each selected scan, uploading findings to the AccuKnox Console.",
+    "category": "Utility",
+    "author": "AccuKnox",
+    "version": {
+        "Major": 1,
+        "Minor": 0,
+        "Patch": 0
+    },
+    "instanceNameFormat": "AccuKnox Code Analysis",
+    "groups": [
+        { "name": "common", "displayName": "Common Options", "isExpanded": true },
+        { "name": "sast", "displayName": "SAST (OpenGrep)", "isExpanded": false },
+        { "name": "sca", "displayName": "SCA (Trivy)", "isExpanded": false },
+        { "name": "secret", "displayName": "Secret (TruffleHog)", "isExpanded": false },
+        { "name": "iac", "displayName": "IaC (Checkov)", "isExpanded": false },
+        { "name": "ml", "displayName": "ML Static Scan (ModelScan)", "isExpanded": false },
+        { "name": "api", "displayName": "API Discovery (code2api)", "isExpanded": false },
+        { "name": "sbom", "displayName": "SBOM", "isExpanded": false }
+    ],
+    "inputs": [
+        {
+            "name": "scanType",
+            "type": "pickList",
+            "label": "Scan Types",
+            "required": true,
+            "helpMarkDown": "Select one or more scans to run: SAST, SCA, Secret, IaC, ML, API Discovery, SBOM.",
+            "properties": {
+                "MultiSelectFlatList": "true"
+            },
+            "options": {
+                "sast": "SAST (OpenGrep)",
+                "sca": "SCA (Trivy)",
+                "secret": "Secret (TruffleHog)",
+                "iac": "IaC (Checkov)",
+                "ml": "ML Static Scan (ModelScan)",
+                "api-discovery": "API Discovery (code2api)",
+                "sbom": "SBOM"
+            }
+        },
+        {
+            "name": "accuknoxEndpoint",
+            "type": "string",
+            "label": "AccuKnox API Endpoint",
+            "required": true,
+            "helpMarkDown": "The URL of the AccuKnox Console to push the scan results to (e.g. cspm.demo.accuknox.com)."
+        },
+        {
+            "name": "accuknoxToken",
+            "type": "string",
+            "label": "AccuKnox Token",
+            "required": true,
+            "helpMarkDown": "The token for authenticating with the AccuKnox Console."
+        },
+        {
+            "name": "accuknoxLabel",
+            "type": "string",
+            "label": "AccuKnox Label",
+            "required": true,
+            "helpMarkDown": "The label created in AccuKnox SaaS for associating scan results."
+        },
+        {
+            "name": "scannerVersion",
+            "type": "string",
+            "label": "Scanner Version",
+            "defaultValue": "v0.14.7-rc.1",
+            "required": false,
+            "groupName": "common",
+            "helpMarkDown": "Git tag of the accuknox-aspm-scanner binary to download (must include the sca, ml and api-discovery scanners)."
+        },
+        {
+            "name": "softFail",
+            "type": "boolean",
+            "label": "Soft Fail",
+            "defaultValue": true,
+            "required": false,
+            "groupName": "common",
+            "helpMarkDown": "Do not return a non-zero exit code if a scan finds issues (applies to all selected scans)."
+        },
+        {
+            "name": "sastCommand",
+            "type": "string",
+            "label": "SAST Command",
+            "defaultValue": ".",
+            "required": false,
+            "groupName": "sast",
+            "helpMarkDown": "Command text passed to --command (the directory/target to scan)."
+        },
+        {
+            "name": "sastSeverity",
+            "type": "string",
+            "label": "SAST Severity",
+            "defaultValue": "HIGH",
+            "required": false,
+            "groupName": "sast",
+            "helpMarkDown": "Comma-separated severities (LOW, MEDIUM, HIGH, CRITICAL)."
+        },
+        {
+            "name": "scaCommand",
+            "type": "string",
+            "label": "SCA Command",
+            "defaultValue": "fs .",
+            "required": false,
+            "groupName": "sca",
+            "helpMarkDown": "Command text passed to --command (e.g. 'fs .')."
+        },
+        {
+            "name": "scaSeverity",
+            "type": "string",
+            "label": "SCA Severity",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "sca",
+            "helpMarkDown": "Comma-separated severities to fail on (UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL)."
+        },
+        {
+            "name": "secretCommand",
+            "type": "string",
+            "label": "Secret Command",
+            "defaultValue": "git file://.",
+            "required": false,
+            "groupName": "secret",
+            "helpMarkDown": "Command text passed to --command (e.g. 'git file://.' or 'filesystem .')."
+        },
+        {
+            "name": "secretAdditionalArguments",
+            "type": "string",
+            "label": "Secret Additional Arguments",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "secret",
+            "helpMarkDown": "Extra arguments appended to the secret command (e.g. --results verified --branch main)."
+        },
+        {
+            "name": "iacCommand",
+            "type": "string",
+            "label": "IaC Command",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "iac",
+            "helpMarkDown": "Raw command text passed to --command. When set, overrides the structured IaC inputs below."
+        },
+        {
+            "name": "iacDirectory",
+            "type": "string",
+            "label": "IaC Directory",
+            "defaultValue": ".",
+            "required": false,
+            "groupName": "iac",
+            "helpMarkDown": "Directory with infrastructure code to scan."
+        },
+        {
+            "name": "iacFile",
+            "type": "string",
+            "label": "IaC File",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "iac",
+            "helpMarkDown": "Specific file to scan; cannot be used together with IaC Directory."
+        },
+        {
+            "name": "iacFramework",
+            "type": "string",
+            "label": "IaC Framework",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "iac",
+            "helpMarkDown": "Restrict scan to specific framework(s), e.g. Kubernetes, Terraform, terraform_plan (comma-separated for multiple)."
+        },
+        {
+            "name": "iacCompact",
+            "type": "boolean",
+            "label": "IaC Compact",
+            "defaultValue": true,
+            "required": false,
+            "groupName": "iac",
+            "helpMarkDown": "Do not display code blocks in the output."
+        },
+        {
+            "name": "iacQuiet",
+            "type": "boolean",
+            "label": "IaC Quiet",
+            "defaultValue": true,
+            "required": false,
+            "groupName": "iac",
+            "helpMarkDown": "Display only failed checks."
+        },
+        {
+            "name": "mlCommand",
+            "type": "string",
+            "label": "ML Command",
+            "defaultValue": "scan -p . -r json",
+            "required": false,
+            "groupName": "ml",
+            "helpMarkDown": "Command text passed to --command (e.g. 'scan -p . -r json')."
+        },
+        {
+            "name": "mlModelName",
+            "type": "string",
+            "label": "ML Model Name",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "ml",
+            "helpMarkDown": "Custom collector/model identifier (optional)."
+        },
+        {
+            "name": "mlSourceType",
+            "type": "string",
+            "label": "ML Source Type",
+            "defaultValue": "azure",
+            "required": false,
+            "groupName": "ml",
+            "helpMarkDown": "Source type for metadata."
+        },
+        {
+            "name": "apiCommand",
+            "type": "string",
+            "label": "API Discovery Command",
+            "defaultValue": "-path . -output results.json",
+            "required": false,
+            "groupName": "api",
+            "helpMarkDown": "Command text passed to --command (e.g. '-path . -output results.json')."
+        },
+        {
+            "name": "sbomScanType",
+            "type": "pickList",
+            "label": "SBOM Target Type",
+            "defaultValue": "filesystem",
+            "required": false,
+            "groupName": "sbom",
+            "helpMarkDown": "Target type: 'image' or 'filesystem'.",
+            "options": {
+                "filesystem": "filesystem",
+                "image": "image"
+            }
+        },
+        {
+            "name": "sbomImageRef",
+            "type": "string",
+            "label": "SBOM Image Reference",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "sbom",
+            "helpMarkDown": "Full registry image reference to scan (required when SBOM Target Type is image)."
+        },
+        {
+            "name": "sbomScanPath",
+            "type": "string",
+            "label": "SBOM Scan Path",
+            "defaultValue": ".",
+            "required": false,
+            "groupName": "sbom",
+            "helpMarkDown": "Filesystem path to scan (used when SBOM Target Type is filesystem)."
+        },
+        {
+            "name": "sbomCommand",
+            "type": "string",
+            "label": "SBOM Command",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "sbom",
+            "helpMarkDown": "Raw command text passed to --command. When set, overrides the structured SBOM inputs above."
+        },
+        {
+            "name": "sbomSeverity",
+            "type": "string",
+            "label": "SBOM Severity",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "sbom",
+            "helpMarkDown": "Comma-separated severities (UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL)."
+        },
+        {
+            "name": "sbomProjectName",
+            "type": "string",
+            "label": "SBOM Project Name",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "sbom",
+            "helpMarkDown": "Project name (AccuKnox entity). Required when SBOM is selected."
+        }
+    ],
+    "execution": {
+        "Node20_1": {
+            "target": "index.js"
+        }
+    }
+}

@@ -1,0 +1,39 @@
+trigger:
+- main
+
+pool:
+  name: selfhosted
+
+steps:
+# -----------------------------------------------------------------------------
+# Run any combination of scans in a single task.
+# scanType accepts a comma/space separated list:
+#   sast, sca, secret, iac, ml, api-discovery, sbom
+# -----------------------------------------------------------------------------
+- task: AccuKnox-Code-Analysis@1
+  inputs:
+    scanType: 'sast, sca, secret, iac'
+    accuknoxEndpoint: '$(ACCUKNOX_ENDPOINT)'
+    accuknoxToken: '$(ACCUKNOX_TOKEN)'
+    accuknoxLabel: '$(ACCUKNOX_LABEL)'
+    softFail: true
+
+    # SAST – override default severity (HIGH)
+    sastSeverity: 'HIGH,CRITICAL'
+
+    # IaC – restrict to specific frameworks
+    iacFramework: 'Kubernetes,Terraform'
+
+# -----------------------------------------------------------------------------
+# SBOM example (requires a Project created in the AccuKnox Console).
+# -----------------------------------------------------------------------------
+# - task: AccuKnox-Code-Analysis@1
+#   inputs:
+#     scanType: 'sbom'
+#     accuknoxEndpoint: '$(ACCUKNOX_ENDPOINT)'
+#     accuknoxToken: '$(ACCUKNOX_TOKEN)'
+#     accuknoxLabel: '$(ACCUKNOX_LABEL)'
+#     sbomScanType: 'filesystem'
+#     sbomScanPath: '.'
+#     sbomProjectName: 'my-project'
+#     softFail: true
