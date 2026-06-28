@@ -279,20 +279,6 @@ steps:
 
 ---
 
-## 🛠️ Building the Extension
-
-```bash
-cd src
-npm install
-npm run build            # compiles index.ts / scanner.ts to .js
-cd ..
-tfx extension create --manifest-globs vss-extension.json
-```
-
-This produces an `AccuKnox.accuknox-code-analysis-1.0.0.vsix` you can upload to the Visual Studio Marketplace.
-
----
-
 ## 📖 Support & Documentation
 
 - 📚 **Read More:** [AccuKnox Docs](https://help.accuknox.com/)
