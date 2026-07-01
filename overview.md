@@ -82,7 +82,6 @@ All examples assume the credentials are defined as pipeline variables: `ACCUKNOX
     accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
     accuknoxToken: $(ACCUKNOX_TOKEN)
     accuknoxLabel: $(ACCUKNOX_LABEL)
-    iacFramework: 'Kubernetes,Terraform'
     softFail: true
 ```
 
@@ -155,7 +154,6 @@ Image SBOM (build/pull the image earlier in the same job):
     accuknoxLabel: $(ACCUKNOX_LABEL)
     softFail: true
     sastSeverity: 'HIGH,CRITICAL'
-    iacFramework: 'Kubernetes,Terraform'
     sbomScanType: 'filesystem'
     sbomScanPath: '.'
     sbomProjectName: 'my-project'

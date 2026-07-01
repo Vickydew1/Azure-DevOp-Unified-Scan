@@ -123,7 +123,6 @@ steps:
     accuknoxEndpoint: $(ACCUKNOX_ENDPOINT)
     accuknoxToken: $(ACCUKNOX_TOKEN)
     accuknoxLabel: $(ACCUKNOX_LABEL)
-    iacFramework: 'Kubernetes,Terraform'
     softFail: true
 ```
 
@@ -181,7 +180,6 @@ steps:
     accuknoxLabel: $(ACCUKNOX_LABEL)
     softFail: true
     sastSeverity: 'HIGH,CRITICAL'
-    iacFramework: 'Kubernetes,Terraform'
     sbomScanType: 'filesystem'
     sbomScanPath: '.'
     sbomProjectName: 'my-project'
