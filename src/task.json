@@ -9,8 +9,8 @@
     "author": "AccuKnox",
     "version": {
         "Major": 2,
-        "Minor": 3,
-        "Patch": 0
+        "Minor": 4,
+        "Patch": 2
     },
     "instanceNameFormat": "AccuKnox Code Analysis",
     "groups": [
@@ -68,7 +68,7 @@
             "name": "scannerVersion",
             "type": "string",
             "label": "Scanner Version",
-            "defaultValue": "v0.14.7-rc.3",
+            "defaultValue": "v0.14.9",
             "required": false,
             "groupName": "common",
             "helpMarkDown": "Git tag of the accuknox-aspm-scanner binary to download (must include the sca, ml and api-discovery scanners)."
@@ -99,6 +99,35 @@
             "required": false,
             "groupName": "sast",
             "helpMarkDown": "Comma-separated severities (LOW, MEDIUM, HIGH, CRITICAL)."
+        },
+        {
+            "name": "enableAiSast",
+            "type": "boolean",
+            "label": "Enable AI-SAST",
+            "defaultValue": false,
+            "required": false,
+            "groupName": "sast",
+            "helpMarkDown": "After OpenGrep SAST, run CodeAssure AI analysis (--ai-analysis). Same as setting ACCUKNOX_ENABLE_AI_SAST=TRUE. Map ACCUKNOX_AI_API_KEY (provider-agnostic LLM key) as a secret via env:, and set codeassure.json api_key to $ACCUKNOX_AI_API_KEY."
+        },
+        {
+            "name": "sastAiScanSeverity",
+            "type": "string",
+            "label": "AI-SAST Severity",
+            "defaultValue": "HIGH,CRITICAL",
+            "required": false,
+            "groupName": "sast",
+            "visibleRule": "enableAiSast = true",
+            "helpMarkDown": "Comma-separated OpenGrep impacts to send to CodeAssure (--aiscan-severity). Default HIGH,CRITICAL."
+        },
+        {
+            "name": "sastCodeassureConfig",
+            "type": "string",
+            "label": "AI-SAST Config Path",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "sast",
+            "visibleRule": "enableAiSast = true",
+            "helpMarkDown": "Optional path to codeassure.json (--codeassure-config). Set model.api_key to $ACCUKNOX_AI_API_KEY. If empty, CodeAssure uses ./codeassure.json when present."
         },
         {
             "name": "scaCommand",
@@ -283,6 +312,16 @@
             "required": false,
             "groupName": "sbom",
             "helpMarkDown": "Project name (AccuKnox entity). Required when SBOM is selected."
+        },
+        {
+            "name": "sbomEnrichLicenses",
+            "type": "boolean",
+            "label": "Enrich SBOM licenses (Syft)",
+            "defaultValue": false,
+            "required": false,
+            "groupName": "sbom",
+            "visibleRule": "sbomScanType = filesystem",
+            "helpMarkDown": "Filesystem SBOM only. After Trivy, run Syft and copy missing SPDX licenses onto matching packages (--enrich-licenses). Default off. Requires a scanner that supports this flag (newer than v0.14.9)."
         }
     ],
     "execution": {

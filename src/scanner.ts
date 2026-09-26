@@ -17,6 +17,9 @@ export interface ScannerConfig {
 export interface SastInputs {
   command: string;
   severity: string;
+  aiAnalysis: boolean;
+  aiScanSeverity: string;
+  codeassureConfig: string;
 }
 
 export interface ScaInputs {
@@ -55,6 +58,7 @@ export interface SbomInputs {
   command: string;
   severity: string;
   projectName: string;
+  enrichLicenses: boolean;
 }
 
 /**
@@ -230,11 +234,26 @@ export class CodeAnalysisScanner {
 
   async runSast(i: SastInputs): Promise<number> {
     console.log('Starting AccuKnox SAST scan...');
+    if (i.aiAnalysis) {
+      try {
+        await this.installTool('codeassure', path.join('codeassure', 'codeassure'));
+      } catch (e) {
+        console.warn(
+          `WARNING: could not install codeassure (${e instanceof Error ? e.message : e}). ` +
+            'AI-SAST may be skipped; OpenGrep SAST will still run.'
+        );
+      }
+    }
     const args = ['scan', '--keep-results', ...this.softFailArg, 'sast', '--command', i.command];
     if (this.repoUrl) args.push('--repo-url', this.repoUrl);
     if (this.commitSha) args.push('--commit-sha', this.commitSha);
     args.push('--pipeline-id', this.pipelineId, '--job-url', this.jobUrl);
     if (i.severity.trim()) args.push('--severity', i.severity.trim());
+    if (i.aiAnalysis) {
+      args.push('--ai-analysis');
+      if (i.aiScanSeverity.trim()) args.push('--aiscan-severity', i.aiScanSeverity.trim());
+      if (i.codeassureConfig.trim()) args.push('--codeassure-config', i.codeassureConfig.trim());
+    }
     return this.exec(args);
   }
 
@@ -341,6 +360,11 @@ export class CodeAnalysisScanner {
       cmd,
       '--generate-sbom',
     ];
+    if (i.enrichLicenses) {
+      // Filesystem-only CLI flag; image/rootfs logs a warning and skips Syft.
+      await this.installTool('syft', 'syft');
+      args.push('--enrich-licenses');
+    }
     const code = await this.exec(args);
     try {
       if (fs.existsSync('results.json')) fs.copyFileSync('results.json', 'results-sbom.json');
