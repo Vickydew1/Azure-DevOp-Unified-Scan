@@ -136,4 +136,5 @@ dist
 .pnp.*
 .taskkey
 *.js
+!test.js
 .js
