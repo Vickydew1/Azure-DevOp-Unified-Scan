@@ -1,7 +1,8 @@
 import tl = require('azure-pipelines-task-lib');
-import { CodeAnalysisScanner, ScannerConfig } from './scanner';
+import { randomUUID } from 'crypto';
+import { CodeAnalysisScanner, PIPELINE_SCANS, pipelineRuns, ScannerConfig } from './scanner';
 
-export const VALID_SCANS = ['sast', 'sca', 'secret', 'iac', 'ml', 'api-discovery', 'sbom'];
+export const VALID_SCANS = ['sast', 'sca', 'secret', 'iac', 'ml', 'sbom'];
 
 /** Same truthy values the CLI accepts for ACCUKNOX_ENABLE_AI_SAST. */
 export function envFlagTrue(name: string): boolean {
@@ -32,10 +33,6 @@ export function parseScanTypes(raw: string): Set<string> {
       case 'mlscan':
         selected.add('ml');
         break;
-      case 'api':
-      case 'api-discovery':
-        selected.add('api-discovery');
-        break;
       case 'sbom':
         selected.add('sbom');
         break;
@@ -63,112 +60,104 @@ export async function run(): Promise<void> {
     }
 
     const softFail = tl.getBoolInput('softFail', false);
+    const containerMode = tl.getBoolInput('containerMode', false);
     const cfg: ScannerConfig = {
       endpoint,
       token,
       label,
-      version: tl.getInput('scannerVersion', false) || 'v0.14.8',
+      version: tl.getInput('scannerVersion', false) || 'v0.17.0',
       softFail,
+      containerMode,
     };
 
     const scanner = new CodeAnalysisScanner(cfg);
     await scanner.setup();
-    await scanner.installTools(selected);
+    // Container mode pulls scanner images instead, so there are no native tools to install.
+    if (!containerMode) await scanner.installTools(selected);
 
-    // Run each selected scan; collect the worst exit code and any failures.
-    const failures: string[] = [];
-    let worstExit = 0;
-    const record = (name: string, code: number) => {
-      if (code !== 0) {
-        worstExit = code;
-        failures.push(name);
-      }
+    const sast = {
+      command: tl.getInput('sastCommand', false) || '.',
+      aiAnalysis: tl.getBoolInput('enableAiSast', false) || envFlagTrue('ACCUKNOX_ENABLE_AI_SAST'),
+      aiScanSeverity: tl.getInput('sastAiScanSeverity', false) || 'HIGH,CRITICAL',
+      codeassureConfig: tl.getInput('sastCodeassureConfig', false) || '',
+    };
+    const sca = {
+      command: tl.getInput('scaCommand', false) || 'fs .',
+    };
+    const secret = {
+      command: tl.getInput('secretCommand', false) || 'git file://.',
+      additionalArguments: tl.getInput('secretAdditionalArguments', false) || '',
+    };
+    const iac = {
+      command: tl.getInput('iacCommand', false) || '',
+      directory: tl.getInput('iacDirectory', false) || '.',
+      file: tl.getInput('iacFile', false) || '',
+      framework: tl.getInput('iacFramework', false) || '',
+      compact: tl.getBoolInput('iacCompact', false),
+      quiet: tl.getBoolInput('iacQuiet', false),
+    };
+    const sbom = {
+      scanType: tl.getInput('sbomScanType', false) || 'filesystem',
+      imageRef: tl.getInput('sbomImageRef', false) || '',
+      scanPath: tl.getInput('sbomScanPath', false) || '.',
+      command: tl.getInput('sbomCommand', false) || '',
+      severity: tl.getInput('sbomSeverity', false) || '',
+      projectName: tl.getInput('sbomProjectName', false) || '',
     };
 
-    if (selected.has('sast')) {
-      record(
-        'sast',
-        await scanner.runSast({
-          command: tl.getInput('sastCommand', false) || '.',
-          severity: tl.getInput('sastSeverity', false) || '',
-          aiAnalysis: tl.getBoolInput('enableAiSast', false) || envFlagTrue('ACCUKNOX_ENABLE_AI_SAST'),
-          aiScanSeverity: tl.getInput('sastAiScanSeverity', false) || 'HIGH,CRITICAL',
-          codeassureConfig: tl.getInput('sastCodeassureConfig', false) || '',
-        })
+    // sast, sca, secret, iac and sbom always go through the `pipeline` command: one run, or two
+    // when iac has to run in its container beside native scans. The quality gate is on only
+    // when qualityGate is true. ml runs as its own scan below.
+    const qualityGate = tl.getBoolInput('qualityGate', false);
+    const pipelineScans = PIPELINE_SCANS.filter((s) => selected.has(s));
+    // The CLI already applied soft fail to the pipeline exit code; what is left must fail the task.
+    let pipelineFailure = '';
+    const runs = pipelineRuns(pipelineScans, containerMode);
+    for (const [n, run] of runs.entries()) {
+      const code = await scanner.runPipeline(
+        {
+          scans: run.scans,
+          qualityGate,
+          gateToken: tl.getInput('accuknoxGateToken', false) || '',
+          gateTimeout: tl.getInput('gateTimeout', false) || '',
+          gateOnTimeout: tl.getInput('gateOnTimeout', false) || '',
+          sast,
+          sca,
+          secret,
+          iac,
+          sbom,
+        },
+        run.containerMode,
+        // Every run after the first gets its own gate run id, so the two verdicts stay apart.
+        qualityGate && n > 0 ? randomUUID() : ''
       );
+      // A run that could not run or upload (2) outranks a policy failure (1) in the message.
+      if (code === 1) {
+        pipelineFailure ||= qualityGate
+          ? 'AccuKnox quality gate failed: a policy blocked this build.'
+          : 'One or more scans reported findings.';
+      } else if (code !== 0) {
+        pipelineFailure = `AccuKnox pipeline could not run, upload or be evaluated (exit code ${code}).`;
+      }
+    }
+    if (runs.length === 0 && qualityGate) {
+      tl.warning('qualityGate is enabled but none of the selected scans support it (sast, sca, secret, iac, sbom).');
     }
 
-    if (selected.has('sca')) {
-      record(
-        'sca',
-        await scanner.runSca({
-          command: tl.getInput('scaCommand', false) || 'fs .',
-          severity: tl.getInput('scaSeverity', false) || '',
-        })
-      );
-    }
-
-    if (selected.has('secret')) {
-      record(
-        'secret',
-        await scanner.runSecret({
-          command: tl.getInput('secretCommand', false) || 'git file://.',
-          additionalArguments: tl.getInput('secretAdditionalArguments', false) || '',
-        })
-      );
-    }
-
-    if (selected.has('iac')) {
-      record(
-        'iac',
-        await scanner.runIac({
-          command: tl.getInput('iacCommand', false) || '',
-          directory: tl.getInput('iacDirectory', false) || '.',
-          file: tl.getInput('iacFile', false) || '',
-          framework: tl.getInput('iacFramework', false) || '',
-          compact: tl.getBoolInput('iacCompact', false),
-          quiet: tl.getBoolInput('iacQuiet', false),
-        })
-      );
-    }
-
+    let mlExit = 0;
     if (selected.has('ml')) {
-      record(
-        'ml',
-        await scanner.runMl({
-          command: tl.getInput('mlCommand', false) || 'scan -p . -r json',
-          modelName: tl.getInput('mlModelName', false) || '',
-          sourceType: tl.getInput('mlSourceType', false) || 'azure',
-        })
-      );
-    }
-
-    if (selected.has('api-discovery')) {
-      record(
-        'api-discovery',
-        await scanner.runApi({
-          command: tl.getInput('apiCommand', false) || '-path . -output results.json',
-        })
-      );
-    }
-
-    if (selected.has('sbom')) {
-      record(
-        'sbom',
-        await scanner.runSbom({
-          scanType: tl.getInput('sbomScanType', false) || 'filesystem',
-          imageRef: tl.getInput('sbomImageRef', false) || '',
-          scanPath: tl.getInput('sbomScanPath', false) || '.',
-          command: tl.getInput('sbomCommand', false) || '',
-          severity: tl.getInput('sbomSeverity', false) || '',
-          projectName: tl.getInput('sbomProjectName', false) || '',
-        })
-      );
+      mlExit = await scanner.runMl({
+        command: tl.getInput('mlCommand', false) || 'scan -p . -r json',
+        modelName: tl.getInput('mlModelName', false) || '',
+        sourceType: tl.getInput('mlSourceType', false) || 'azure',
+      });
     }
 
     // -------------------- HANDLE RESULT --------------------
-    if (worstExit !== 0) {
-      const msg = `The following scan(s) reported findings or errors: ${failures.join(', ')}.`;
+    if (pipelineFailure) {
+      tl.setResult(tl.TaskResult.Failed, pipelineFailure);
+    } else if (mlExit !== 0) {
+      const msg = 'The ML scan reported findings or errors.';
       if (softFail) {
         console.log(`${msg} Soft fail is enabled, continuing...`);
         tl.setResult(tl.TaskResult.Succeeded, `${msg} Soft fail enabled.`);

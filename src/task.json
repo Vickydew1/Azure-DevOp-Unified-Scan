@@ -1,26 +1,26 @@
 {
     "$schema": "https://raw.githubusercontent.com/Microsoft/azure-pipelines-task-lib/master/tasks.schema.json",
-    "id": "d2b8b209-2770-409f-9f24-3cda44c6a541",
-    "name": "AccuKnox-Code-Analysis",
-    "friendlyName": "AccuKnox Code Analysis",
-    "description": "Unified AccuKnox ASPM scanner. Run any combination of SAST, SCA, Secret, IaC, ML, API Discovery and SBOM scans and upload the results to the AccuKnox Console.",
+    "id": "fc6fac00-7b44-4437-be22-67037700b87f",
+    "name": "AccuKnox-Unified-Scan",
+    "friendlyName": "AccuKnox Unified Scan",
+    "description": "Unified AccuKnox ASPM scanner. Run any combination of SAST, SCA, Secret, IaC, ML and SBOM scans and upload the results to the AccuKnox Console.",
     "helpMarkDown": "Unified AccuKnox ASPM scanner for Azure DevOps. Select one or more scans via 'Scan Types' and the task downloads the accuknox-aspm-scanner and runs each selected scan, uploading findings to the AccuKnox Console.",
     "category": "Utility",
     "author": "AccuKnox",
     "version": {
-        "Major": 2,
-        "Minor": 4,
+        "Major": 1,
+        "Minor": 0,
         "Patch": 0
     },
-    "instanceNameFormat": "AccuKnox Code Analysis",
+    "instanceNameFormat": "AccuKnox Unified Scan",
     "groups": [
         { "name": "common", "displayName": "Common Options", "isExpanded": true },
+        { "name": "gate", "displayName": "Quality Gate", "isExpanded": false },
         { "name": "sast", "displayName": "SAST", "isExpanded": false },
         { "name": "sca", "displayName": "SCA", "isExpanded": false },
         { "name": "secret", "displayName": "Secret", "isExpanded": false },
         { "name": "iac", "displayName": "IaC", "isExpanded": false },
         { "name": "ml", "displayName": "ML Static Scan", "isExpanded": false },
-        { "name": "api", "displayName": "API Discovery", "isExpanded": false },
         { "name": "sbom", "displayName": "SBOM", "isExpanded": false }
     ],
     "inputs": [
@@ -29,7 +29,7 @@
             "type": "pickList",
             "label": "Scan Types",
             "required": true,
-            "helpMarkDown": "Select one or more scans to run: SAST, SCA, Secret, IaC, ML, API Discovery, SBOM.",
+            "helpMarkDown": "Select one or more scans to run: SAST, SCA, Secret, IaC, ML, SBOM.",
             "properties": {
                 "MultiSelectFlatList": "true"
             },
@@ -39,7 +39,6 @@
                 "secret": "Secret",
                 "iac": "IaC",
                 "ml": "ML Static Scan",
-                "api-discovery": "API Discovery",
                 "sbom": "SBOM"
             }
         },
@@ -68,10 +67,62 @@
             "name": "scannerVersion",
             "type": "string",
             "label": "Scanner Version",
-            "defaultValue": "v0.14.8",
+            "defaultValue": "v0.17.0",
             "required": false,
             "groupName": "common",
-            "helpMarkDown": "Git tag of the accuknox-aspm-scanner binary to download (must include the sca, ml and api-discovery scanners)."
+            "helpMarkDown": "Git tag of the accuknox-aspm-scanner binary to download. Needs v0.17.0 or later (the task uses its pipeline command)."
+        },
+        {
+            "name": "containerMode",
+            "type": "boolean",
+            "label": "Container Mode",
+            "defaultValue": false,
+            "required": false,
+            "groupName": "common",
+            "helpMarkDown": "Run every scanner in a container (--container-mode) instead of natively on the agent. Needs Docker on the agent. Off by default. IaC and ML always run in their containers."
+        },
+        {
+            "name": "qualityGate",
+            "type": "boolean",
+            "label": "Quality Gate",
+            "defaultValue": false,
+            "required": false,
+            "groupName": "gate",
+            "helpMarkDown": "Wait for the AccuKnox policy verdict and fail the task when a policy blocks the build. Off by default: scans are uploaded but no verdict is awaited. With Soft Fail, a policy failure is reported but does not fail the task."
+        },
+        {
+            "name": "accuknoxGateToken",
+            "type": "string",
+            "label": "Quality Gate Token",
+            "defaultValue": "",
+            "required": false,
+            "groupName": "gate",
+            "visibleRule": "qualityGate = true",
+            "helpMarkDown": "User token for the quality-gate API, passed as a secret variable. If empty, the ACCUKNOX_GATE_TOKEN environment variable is used, then the AccuKnox Token."
+        },
+        {
+            "name": "gateTimeout",
+            "type": "string",
+            "label": "Quality Gate Timeout (seconds)",
+            "defaultValue": "300",
+            "required": false,
+            "groupName": "gate",
+            "visibleRule": "qualityGate = true",
+            "helpMarkDown": "How long to wait for the policy verdict. Raise it if the first run for a scan type times out."
+        },
+        {
+            "name": "gateOnTimeout",
+            "type": "pickList",
+            "label": "On Quality Gate Timeout",
+            "defaultValue": "fail",
+            "required": false,
+            "groupName": "gate",
+            "visibleRule": "qualityGate = true",
+            "helpMarkDown": "What to do when no verdict arrives in time: fail the task or let it pass.",
+            "options": {
+                "fail": "fail",
+                "pass": "pass"
+            }
         },
         {
             "name": "softFail",
@@ -80,7 +131,7 @@
             "defaultValue": true,
             "required": false,
             "groupName": "common",
-            "helpMarkDown": "Do not return a non-zero exit code if a scan finds issues (applies to all selected scans)."
+            "helpMarkDown": "Do not fail the task when a scan finds issues or a quality gate policy fails. A scan that could not run or upload still fails the task."
         },
         {
             "name": "sastCommand",
@@ -90,15 +141,6 @@
             "required": false,
             "groupName": "sast",
             "helpMarkDown": "Command text passed to --command (the directory/target to scan)."
-        },
-        {
-            "name": "sastSeverity",
-            "type": "string",
-            "label": "SAST Severity",
-            "defaultValue": "HIGH",
-            "required": false,
-            "groupName": "sast",
-            "helpMarkDown": "Comma-separated severities (LOW, MEDIUM, HIGH, CRITICAL)."
         },
         {
             "name": "enableAiSast",
@@ -137,15 +179,6 @@
             "required": false,
             "groupName": "sca",
             "helpMarkDown": "Command text passed to --command (e.g. 'fs .')."
-        },
-        {
-            "name": "scaSeverity",
-            "type": "string",
-            "label": "SCA Severity",
-            "defaultValue": "",
-            "required": false,
-            "groupName": "sca",
-            "helpMarkDown": "Comma-separated severities to fail on (UNKNOWN, LOW, MEDIUM, HIGH, CRITICAL)."
         },
         {
             "name": "secretCommand",
@@ -245,15 +278,6 @@
             "required": false,
             "groupName": "ml",
             "helpMarkDown": "Source type for metadata."
-        },
-        {
-            "name": "apiCommand",
-            "type": "string",
-            "label": "API Discovery Command",
-            "defaultValue": "-path . -output results.json",
-            "required": false,
-            "groupName": "api",
-            "helpMarkDown": "Command text passed to --command (e.g. '-path . -output results.json')."
         },
         {
             "name": "sbomScanType",
